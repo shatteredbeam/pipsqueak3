@@ -12,29 +12,15 @@ This module is built on top of the Pydle system.
 """
 
 from config import config
-from typing import Optional
+from psycopg2 import sql
 from utils.ratlib import Singleton
-import datetime
 import logging
-import pyodbc
+import psycopg2
 
 log = logging.getLogger(f"mecha.{__name__}")
 
 
 class DatabaseManager(Singleton):
-
-    _QUERY_CREATE_FACT_TABLE = "CREATE TABLE IF NOT EXISTS ", \
-                               "fact (name VARCHAR NOT NULL,lang "\
-                               "VARCHAR NOT NULL,message VARCHAR NOT NULL, ",\
-                               "author VARCHAR, PRIMARY KEY (name, lang));"
-
-    _QUERY_CREATE_TIMESTAMP_TABLE = "CREATE TABLE IF NOT EXISTS fact_timestamps ",\
-                                    "(id SERIAL PRIMARY KEY, name VARCHAR NOT NULL, ",\
-                                    "lang VARCHAR NOT NULL, message VARCHAR NOT NULL, ", \
-                                    "author VARCHAR NOT NULL, date_changed ", \
-                                    "TIMESTAMP WITH TIME ZONE NOT NULL);"
-
-    _ERROR_SUFFIX = "This is required with the chosen connection type."
 
     # TODO: Abstraction
     # TODO: Getters/Setters
@@ -44,35 +30,32 @@ class DatabaseManager(Singleton):
 
         if not hasattr(self, "_initialized"):
             self._initialized = True
-            self._connection: Optional[pyodbc.Connection] = None
-            self._cursor: Optional[pyodbc.Cursor] = None
-            self._connectionString = config['database']['odbc_string']
-            self._connectionType = config['database']['connection_type']
-            self._dsn = config['database']['dsn']
-            self._dsnuid = config['database']['dsn_uid']
-            self._dsnpwd = config['database']['dsn_pwd']
+            self._connection = None
+            self._connectionString = ''
+            self._cursor = None
+            self._dbhost = config['database']['host']
+            self._dbport = config['database']['port']
+            self._dbname = config['database']['dbname']
+            self._dbuser = config['database']['username']
+            self._dbpass = config['database']['password']
             self._retryattempts = config['database']['retry_attempts']
             self._retryinterval = config['database']['retry_interval']
 
     def _validateconnection(self):
-        # Validate Connection Type
-        if self._connectionType.casefold() not in ["odbc", "dsn"]:
-            raise ValueError("Invalid Connection Type. " + self._ERROR_SUFFIX)
+        # Validate Connection Information
+        if not self._dbhost:
+            raise ValueError("Please set a database hostname [locahost/127.0.0.1]")
+        if not self._dbport or not self._dbport.isdigit():
+            log.debug("Bad or non-numeric database port. Defaulting to 5432.")
+            self._dbport = 5432
+        if not self._dbname:
+            raise ValueError("Please set a database name. [mecha3]")
+        if not self._dbuser:
+            raise ValueError("Please set a database username.")
+        if not self._dbpass:
+            raise ValueError("Please set a database user password.")
 
-        # Validate ODBC Settings
-        if not self._connectionString:
-            raise ValueError("No ODBC String entered. " + self._ERROR_SUFFIX)
-
-        # Validate DSN Settings
-        if self._connectionType.casefold() == 'dsn':
-            if self._dsn:
-                raise ValueError("No DSN Entered. " + self._ERROR_SUFFIX)
-            if not self._dsnuid:
-                raise ValueError("No DSN UID Entered. " + self._ERROR_SUFFIX)
-            if not self._dsnpwd:
-                raise ValueError("No DSN Password Entered." + self._ERROR_SUFFIX)
-
-        # Validate Retry Settings(Both must be an integer)
+        # Validate Retry Settings/Sanity
         if not self._retryinterval.isdigit():
             raise ValueError("Retry Interval must be an integer.")
 
@@ -85,56 +68,29 @@ class DatabaseManager(Singleton):
         if self._retryattempts < 0 or self._retryattempts > 100:
             raise ValueError("Retry Attempts must be between zero and 100.")
 
-    def _connect(self):
+    def _buildconnectionstring(self):
+        self._connectionString = f"host='{self._dbhost}', port='{self._dbport}', dbname='{self._dbname}', " \
+                                 f"user='{self._dbuser}', password='{self._dbpass}'"
+
+    async def _connect(self):
+        # Build Connection String...
+        self._buildconnectionstring()
+
+        # Attempt to connect to the database, catching any errors in the process.
         try:
-            self._connection = pyodbc.connect(self._connectionString)
-        except (pyodbc.Error, pyodbc.ProgrammingError) as pyodbcError:
-            log.error(pyodbcError)
-
+            self._connection = psycopg2.connect(self._connectionString)
+        except psycopg2.Error as psyError:
+            log.error(psyError)
         # Set Parameters of the connection(self)
-        self._connection.setdecoding(pyodbc.SQL_WCHAR, encoding='utf-8')
-        self._connection.setencoding(pyodbc.SQL_CHAR, encoding='utf-8')
-        self._connection.maxwrite = 1024 * 1024 * 1024
-
+        self._connection.set_session(autocommit=True)
+        self._connection.set_client_encoding('utf-8')
         # Create main cursor
         self._cursor = self._connection.cursor()
 
-        # Check if the database has been initialized with the tables we need:
+    async def _query(self, query: sql.SQL):
+        # Requires a composed sql.SQL string (should be passed from derived class) to prevent injection.
+        if not isinstance(query, sql.SQL):
+            raise TypeError("Expected composed SQL Object.")
 
-    async def _verifytablestructure(self):
-        try:
-            self._cursor.execute("SELECT 1 FROM fact")
-            tablecheck = self._cursor.commit()
-
-            self._cursor.execute("SELECT 1 FROM fact_timestamps")
-            tscheck = self._cursor.commit()
-
-            if not tablecheck:
-                log.warning("Facts Table does not exist or is inaccessible.")
-            if not tscheck:
-                log.warning("Fact Timestamp Table does not exist or is inaccessible")
-
-        except pyodbc.DatabaseError as pyodbcError:
-            log.error(pyodbcError)
-
-        finally:
-            if self._connection:
-                self._connection.close()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        # Now that we can't pass a string, only a SQL object, the driver handles injection checking
+        await self._cursor.execute(query)

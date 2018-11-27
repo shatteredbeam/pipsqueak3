@@ -20,6 +20,18 @@ import psycopg2
 log = logging.getLogger(f"mecha.{__name__}")
 
 
+class Error(Exception):
+    # Base Exception for DBM Errors
+    pass
+
+
+class TableScopeError(Error):
+    # Raised by the DatabaseManager if a requested table is outside defined table scope.
+    def __init__(self, expression, message):
+        self.expression = expression
+        self.message = message
+
+
 class DatabaseManager(Singleton):
 
     # TODO: Abstraction
@@ -38,14 +50,15 @@ class DatabaseManager(Singleton):
             self._dbname = config['database']['dbname']
             self._dbuser = config['database']['username']
             self._dbpass = config['database']['password']
+            self._tables = ('fact', 'timestamp')
             self._retryattempts = config['database']['retry_attempts']
             self._retryinterval = config['database']['retry_interval']
 
     def _validateconnection(self):
         # Validate Connection Information
         if not self._dbhost:
-            raise ValueError("Please set a database hostname [locahost/127.0.0.1]")
-        if not self._dbport or not self._dbport.isdigit():
+            raise ValueError("Please set a database hostname [localhost/127.0.0.1]")
+        if not self._dbport:
             log.debug("Bad or non-numeric database port. Defaulting to 5432.")
             self._dbport = 5432
         if not self._dbname:
@@ -68,9 +81,16 @@ class DatabaseManager(Singleton):
         if self._retryattempts < 0 or self._retryattempts > 100:
             raise ValueError("Retry Attempts must be between zero and 100.")
 
+    # Check if a table is in the list
+    def _tablecheck(self, table: str):
+        if table in self._tables:
+            return
+        else:
+            raise TableScopeError(f"table {table} is located outside of the defined schema.")
+
     def _buildconnectionstring(self):
         self._connectionString = f"host='{self._dbhost}', port='{self._dbport}', dbname='{self._dbname}', " \
-                                 f"user='{self._dbuser}', password='{self._dbpass}'"
+                                 f"user='{self._dbuser}', password='{self._dbpass}', 'connect_timeout=5"
 
     async def _connect(self):
         # Build Connection String...
@@ -78,7 +98,7 @@ class DatabaseManager(Singleton):
 
         # Attempt to connect to the database, catching any errors in the process.
         try:
-            self._connection = psycopg2.connect(self._connectionString)
+            self._connection = await psycopg2.connect(self._connectionString)
         except psycopg2.Error as psyError:
             log.error(psyError)
         # Set Parameters of the connection(self)
@@ -90,7 +110,24 @@ class DatabaseManager(Singleton):
     async def _query(self, query: sql.SQL):
         # Requires a composed sql.SQL string (should be passed from derived class) to prevent injection.
         if not isinstance(query, sql.SQL):
+            log.warning(f"Discarded Query: [{self._cursor.mogrify(query)}]")
             raise TypeError("Expected composed SQL Object.")
 
-        # Now that we can't pass a string, only a SQL object, the driver handles injection checking
-        await self._cursor.execute(query)
+        # Now that we can't pass a string, only a SQL object, the driver handles injection checking.  Use a
+        # block here so psycopg2 will roll back a transaction that fails.
+        try:
+            self._cursor.execute(query)
+            log.info(f"Accepted Query [{self._cursor.mogrify(query)}]")
+        except psycopg2.Error as pgE:
+            # Close the connection and re-establish.
+            await self._cursor.close()
+            await self._connection.close()
+            await self._connect()
+            # Log the issue:
+            log.error(f"Connection aborted and reconnecting: {pgE}")
+
+    async def _status(self):
+        if self._connection.close > 0:
+            return False
+        else:
+            return True

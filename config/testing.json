@@ -8,6 +8,15 @@
       "#unkn0wndev"
     ]
   },
+  "database": {
+    "dbname": "mecha3",
+    "host": "localhost",
+    "port": 5432,
+    "username": "mecha3",
+    "password": "mecha3",
+    "retry_attempts": 5,
+    "retry_interval": 120
+  },
   "authentication": {
     "method": "PLAIN",
     "plain": {

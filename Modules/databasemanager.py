@@ -11,6 +11,7 @@ See LICENSE.md
 This module is built on top of the Pydle system.
 """
 
+from abc import abstractmethod
 from config import config
 from psycopg2 import sql
 from utils.ratlib import Singleton
@@ -38,6 +39,10 @@ class DatabaseManager(Singleton):
     # TODO: Getters/Setters
     # TODO: public/private properties/methods
 
+    @abstractmethod
+    def safe_tables(self):
+        pass
+
     def __init__(self, *args, **kwargs):
 
         if not hasattr(self, "_initialized"):
@@ -47,20 +52,21 @@ class DatabaseManager(Singleton):
             self._cursor = None
             self._dbhost = config['database']['host']
             self._dbport = config['database']['port']
+            if not self._dbport:
+                log.debug("Bad or non-numeric database port. Defaulting to 5432.")
+                self._dbport = 5432
             self._dbname = config['database']['dbname']
             self._dbuser = config['database']['username']
             self._dbpass = config['database']['password']
-            self._tables = ('fact', 'timestamp')
+            self._tables = []
             self._retryattempts = config['database']['retry_attempts']
             self._retryinterval = config['database']['retry_interval']
 
-    def _validateconnection(self):
-        # Validate Connection Information
+    def _validate_config(self):
+        # Validate config Information
         if not self._dbhost:
             raise ValueError("Please set a database hostname [localhost/127.0.0.1]")
-        if not self._dbport:
-            log.debug("Bad or non-numeric database port. Defaulting to 5432.")
-            self._dbport = 5432
+
         if not self._dbname:
             raise ValueError("Please set a database name. [mecha3]")
         if not self._dbuser:
@@ -82,19 +88,21 @@ class DatabaseManager(Singleton):
             raise ValueError("Retry Attempts must be between zero and 100.")
 
     # Check if a table is in the list
-    def _tablecheck(self, table: str):
-        if table in self._tables:
-            return
-        else:
+    def _table_check(self, table: str):
+        if table not in self._tables:
             raise TableScopeError(f"table {table} is located outside of the defined schema.")
 
-    def _buildconnectionstring(self):
-        self._connectionString = f"host='{self._dbhost}', port='{self._dbport}', dbname='{self._dbname}', " \
-                                 f"user='{self._dbuser}', password='{self._dbpass}', 'connect_timeout=5"
+    def _build_connection_string(self):
+        self._connectionString = f"host='{self._dbhost}'," \
+            f"port='{self._dbport}'," \
+            f"dbname='{self._dbname}', " \
+            f"user='{self._dbuser},'" \
+            f"password='{self._dbpass}'," \
+            f"'connect_timeout=5"
 
     async def _connect(self):
         # Build Connection String...
-        self._buildconnectionstring()
+        self._build_connection_string()
 
         # Attempt to connect to the database, catching any errors in the process.
         try:

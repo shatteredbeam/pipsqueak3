@@ -43,67 +43,48 @@ class DatabaseManager(Singleton):
     def safe_tables(self):
         pass
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self,
+                 dbhost=None,
+                 dbPort=None,
+                 dbName=None,
+                 dbUser=None,
+                 dbPassword=None,
+                 safe_tables: list=None
+                 ):
 
+        # Singleton Check
         if not hasattr(self, "_initialized"):
             self._initialized = True
+
+            # Set Instance properties
             self._connection = None
-            self._connectionString = ''
             self._cursor = None
-            self._dbhost = config['database']['host']
-            self._dbport = config['database']['port']
-            if not self._dbport:
-                log.debug("Bad or non-numeric database port. Defaulting to 5432.")
-                self._dbport = 5432
-            self._dbname = config['database']['dbname']
-            self._dbuser = config['database']['username']
-            self._dbpass = config['database']['password']
-            self._tables = []
-            self._retryattempts = config['database']['retry_attempts']
-            self._retryinterval = config['database']['retry_interval']
 
-    def _validate_config(self):
-        # Validate config Information
-        if not self._dbhost:
-            raise ValueError("Please set a database hostname [localhost/127.0.0.1]")
+            self._dbhost = config['database'].get('host')
+            assert self._dbhost
 
-        if not self._dbname:
-            raise ValueError("Please set a database name. [mecha3]")
-        if not self._dbuser:
-            raise ValueError("Please set a database username.")
-        if not self._dbpass:
-            raise ValueError("Please set a database user password.")
+            self._dbport = config['database'].get('port')
+            assert self._dbport and self._dbport.isdecimal()
 
-        # Validate Retry Settings/Sanity
-        if not self._retryinterval.isdigit():
-            raise ValueError("Retry Interval must be an integer.")
+            self._dbname = config['database'].get('dbname')
+            assert self._dbname
 
-        if not self._retryattempts.isdigit():
-            raise ValueError("Retry Attempts must be an integer.")
+            self._dbuser = config['database'].get('username')
+            assert self._dbuser
 
-        if self._retryinterval < 0 or self._retryinterval > 999:
-            raise ValueError("Retry Interval must be between zero and 999 seconds.")
+            self._dbpass = config['database'].get('password')
+            assert self._dbpass
 
-        if self._retryattempts < 0 or self._retryattempts > 100:
-            raise ValueError("Retry Attempts must be between zero and 100.")
+            self.__safe_tables = []
 
-    # Check if a table is in the list
-    def _table_check(self, table: str):
-        if table not in self._tables:
-            raise TableScopeError(f"table {table} is located outside of the defined schema.")
-
-    def _build_connection_string(self):
-        self._connectionString = f"host='{self._dbhost}'," \
-            f"port='{self._dbport}'," \
-            f"dbname='{self._dbname}', " \
-            f"user='{self._dbuser},'" \
-            f"password='{self._dbpass}'," \
-            f"'connect_timeout=5"
+            self._connectionString = f"host='{self._dbhost}'," \
+                f"port='{self._dbport}'," \
+                f"dbname='{self._dbname}', " \
+                f"user='{self._dbuser},'" \
+                f"password='{self._dbpass}'," \
+                f"'connect_timeout=5"
 
     async def _connect(self):
-        # Build Connection String...
-        self._build_connection_string()
-
         # Attempt to connect to the database, catching any errors in the process.
         try:
             self._connection = await psycopg2.connect(self._connectionString)
@@ -115,11 +96,21 @@ class DatabaseManager(Singleton):
         # Create main cursor
         self._cursor = self._connection.cursor()
 
-    async def _query(self, query: sql.SQL):
+    async def _query(self, query: sql.SQL) -> list:
+        # Check the status of the connection before proceeding:
+        if self._connection.status > 0:
+            raise psycopg2.DatabaseError("Connection status is invalid for transaction.")
+
         # Requires a composed sql.SQL string (should be passed from derived class) to prevent injection.
         if not isinstance(query, sql.SQL):
-            log.warning(f"Discarded Query: [{self._cursor.mogrify(query)}]")
+            log.warning(f"Discarded Query (Type not SQL): [{self._cursor.mogrify(query)}]")
             raise TypeError("Expected composed SQL Object.")
+
+        # Check that the table name is indeed in the sql query.  In this way, we force the whitelist validation
+        # AND disallow attempts at global queries.
+        if not any(table for table in self._cursor.mogrify(query) in self.__safe_tables):
+            log.warning(f"Discarded Query (Table out of scope): [{self._cursor.mogrify(query)}]")
+            raise TableScopeError(f"Requested Table out of scope. Available tables: {self.__safe_tables}")
 
         # Now that we can't pass a string, only a SQL object, the driver handles injection checking.  Use a
         # block here so psycopg2 will roll back a transaction that fails.
@@ -130,12 +121,17 @@ class DatabaseManager(Singleton):
             # Close the connection and re-establish.
             await self._cursor.close()
             await self._connection.close()
+
+            # Clean up
+            self._cursor = None
+            self._connection = None
+
+            # Attempt to Reconnect
             await self._connect()
+
             # Log the issue:
             log.error(f"Connection aborted and reconnecting: {pgE}")
 
-    async def _status(self):
-        if self._connection.close > 0:
-            return False
-        else:
-            return True
+        # Warning: May return an empty list.
+        return list(await self._cursor.fetchall())
+

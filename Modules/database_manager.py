@@ -33,7 +33,7 @@ class TableScopeError(Error):
         self.message = message
 
 
-class DatabaseManager(Singleton):
+class DatabaseManager(Singleton, object):
 
     # TODO: Abstraction
     # TODO: Getters/Setters
@@ -84,19 +84,20 @@ class DatabaseManager(Singleton):
                 f"password='{self._dbpass}'," \
                 f"'connect_timeout=5"
 
-    async def _connect(self):
-        # Attempt to connect to the database, catching any errors in the process.
-        try:
-            self._connection = await psycopg2.connect(self._connectionString)
-        except psycopg2.Error as psyError:
-            log.error(psyError)
-        # Set Parameters of the connection(self)
-        self._connection.set_session(autocommit=True)
-        self._connection.set_client_encoding('utf-8')
-        # Create main cursor
-        self._cursor = self._connection.cursor()
-
     async def _query(self, query: sql.SQL) -> list:
+        # Attempt to connect to the database, catching any errors in the process.
+        if self._connection is None:
+            try:
+                self._connection = await psycopg2.connect(self._connectionString)
+            except psycopg2.Error as psyError:
+                log.exception(psyError)
+
+            # Set Parameters of the connection(self)
+            self._connection.set_session(autocommit=True)
+            self._connection.set_client_encoding('utf-8')
+            # Create main cursor
+            self._cursor = self._connection.cursor()
+
         # Check the status of the connection before proceeding:
         if self._connection.status > 0:
             raise psycopg2.DatabaseError("Connection status is invalid for transaction.")
@@ -115,7 +116,7 @@ class DatabaseManager(Singleton):
         # Now that we can't pass a string, only a SQL object, the driver handles injection checking.  Use a
         # block here so psycopg2 will roll back a transaction that fails.
         try:
-            self._cursor.execute(query)
+            await self._cursor.execute(query)
             log.info(f"Accepted Query [{self._cursor.mogrify(query)}]")
         except psycopg2.Error as pgE:
             # Close the connection and re-establish.
@@ -125,9 +126,6 @@ class DatabaseManager(Singleton):
             # Clean up
             self._cursor = None
             self._connection = None
-
-            # Attempt to Reconnect
-            await self._connect()
 
             # Log the issue:
             log.error(f"Connection aborted and reconnecting: {pgE}")

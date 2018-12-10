@@ -8,7 +8,8 @@ Licensed under the BSD 3-Clause License.
 
 See LICENSE.md
 """
+from .fact import Fact, FactDetail
+from .database_manager import DatabaseManager
+from .facts_manager import FactManager
 
-__all__ = ["fact", "facts_manager", "database_manager"]
-
-from facts import *
+__all__ = ["Fact", "FactDetail", "FactManager", "DatabaseManager"]

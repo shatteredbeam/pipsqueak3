@@ -11,36 +11,31 @@ See LICENSE.md
 This module is built on top of the Pydle system.
 """
 
+
+import logging
 import psycopg2
 import datetime
+from typing import NoReturn
 from Modules.database_manager import DatabaseManager
 from utils.ratlib import Singleton
+
+log = logging.getLogger(f"mecha.{__name__}")
 
 
 # Fact Details Object
 class FactDetail:
-    last_edit = None
-    last_editor = None
-    last_content = None
 
     def __init__(self,
                  last_edit: datetime.datetime,
                  last_editor: str,
                  last_content: str
                  ):
-        self.last_edit = last_edit
-        self.last_editor = last_editor
-        self.last_content = last_content
+        self._last_edit = last_edit
+        self._last_editor = last_editor
+        self._last_content = last_content
 
 
 class Fact:
-    name = None
-    lang = None
-    content = None
-    author = None
-    timestamp = None
-    marked_for_deletion = False
-    details = None
 
     def __init__(self,
                  name: str,
@@ -50,12 +45,51 @@ class Fact:
                  timestamp: datetime.datetime,
                  details: FactDetail
                  ):
-            self.name = name
-            self.lang = lang
-            self.content = content
-            self.author = author
-            self.timestamp = timestamp
-            self.details = details
+            self._name = name
+            self._lang = lang
+            self._content = content
+            self._author = author
+            self._timestamp = timestamp
+            self._details = details
+
+    @property
+    def name(self) -> str:
+        """
+        Name of Fact, aka triggering command without command prefix.
+
+        Returns:
+            Name of the fact, as a string
+        """
+        return self._name
+
+    @name.setter
+    def name(self, value) -> NoReturn:
+        """
+        Set Fact Name, aka triggering command.
+        Args:
+            value: string name to be set
+
+        Returns:
+            Nothing
+        """
+        if not isinstance(value, str):
+            raise TypeError("Expected string value")
+
+        self._name = value
+
+    @property
+    def lang(self):
+        """
+        Language ID of the fact. two characters only.
+
+        Returns:
+              str language ID.
+        """
+        return self._lang
+
+    @lang.setter
+    def lang(self, value):
+        pass
 
 
 class FactManager(Singleton):

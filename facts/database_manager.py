@@ -84,7 +84,7 @@ class DatabaseManager(Singleton, object):
                 f"password='{self._dbpass}'," \
                 f"'connect_timeout=5"
 
-    async def _query(self, query: sql.SQL) -> list:
+    async def query(self, query: sql.SQL, values: tuple) -> list:
         # Attempt to connect to the database, catching any errors in the process.
         if self._connection is None:
             try:
@@ -116,7 +116,7 @@ class DatabaseManager(Singleton, object):
         # Now that we can't pass a string, only a SQL object, the driver handles injection checking.  Use a
         # block here so psycopg2 will roll back a transaction that fails.
         try:
-            await self._cursor.execute(query)
+            await self._cursor.execute(query, values)
             log.info(f"Accepted Query [{self._cursor.mogrify(query)}]")
         except psycopg2.Error as pgE:
             # Close the connection and re-establish.

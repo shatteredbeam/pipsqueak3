@@ -15,20 +15,28 @@ import datetime
 from typing import NoReturn, Union
 
 
-class FactDetail:
-    """
-    FactDetail is a sub-object that contains information for a fact from extended tables
-    and is not included in the initial Fact find query.  These fields will not be populated initially.
-    """
+class Fact:
 
     def __init__(self,
+                 name: str,
+                 lang: str,
+                 content: str,
+                 author: str,
+                 mfd: bool,  # MFD = Marked for deletion
+                 created_at: datetime.datetime,
                  last_edit: datetime.datetime,
                  last_editor: str,
                  history: list,
                  ):
-        self._last_edit = last_edit
-        self._last_editor = last_editor
-        self._history = history
+            self._name = name
+            self._lang = lang
+            self._content = content
+            self._author = author
+            self._created_at = created_at
+            self._mfd = mfd
+            self._last_edit = last_edit
+            self._last_editor = last_editor
+            self._history = history
 
     @property
     def last_edit(self) -> Union[datetime.datetime, None]:
@@ -100,28 +108,6 @@ class FactDetail:
         """
         if not isinstance(value, list):
             raise TypeError("Expected list value for history property.")
-
-        self._history = value
-
-
-class Fact:
-
-    def __init__(self,
-                 name: str,
-                 lang: str,
-                 content: str,
-                 author: str,
-                 timestamp: datetime.datetime,
-                 mfd: bool,  # MFD = Marked for deletion
-                 details: FactDetail
-                 ):
-            self._name = name
-            self._lang = lang
-            self._content = content
-            self._author = author
-            self._timestamp = timestamp
-            self._mfd = mfd
-            self._details = details
 
     @property
     def name(self) -> str:
@@ -226,22 +212,7 @@ class Fact:
             (datetime.datetime) date and time when the fact was added to the database.
 
         """
-        return self._timestamp
-
-    @timestamp.setter
-    def timestamp(self, value) -> NoReturn:
-        """
-        Args:
-            value: datetime.datetime stamp for creation date/time
-
-        Returns:
-                Nothing.
-        """
-
-        if not isinstance(value, datetime.datetime):
-            raise ValueError("Expected datetime.datetime")
-
-        self._timestamp = value
+        return self._created_at
 
     @property
     def mfd(self) -> bool:

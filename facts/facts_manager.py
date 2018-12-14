@@ -15,7 +15,8 @@ This module is built on top of the Pydle system.
 import logging
 import psycopg2
 from psycopg2 import sql
-from facts import Fact, FactDetail, FactManager, DatabaseManager
+from facts import Fact, DatabaseManager
+from datetime import datetime, timezone
 from typing import NoReturn, Optional
 from utils.ratlib import Singleton
 
@@ -23,9 +24,6 @@ log = logging.getLogger(f"mecha.{__name__}")
 
 
 class FactManager(Singleton):
-    _SELECT_FACT = ''
-    _UPDATE_FACT = ''
-    _INSERT_FACT = ''
     _CREATE_FACT_DETAIL_TABLE = 'CREATE TABLE IF NOT EXISTS fact_detail ' \
                                 '(id SERIAL, fact_name VARCHAR NOT NULL, ' \
                                 'fact_lang VARCHAR NOT NULL, ' \
@@ -57,10 +55,11 @@ class FactManager(Singleton):
         except psycopg2.Error:
             log.exception("Unable to initiate DatabaseManager.")
 
-    async def find(self, name: str, lang: str, extended=False) -> Optional[Fact]:
-        find_query = sql.SQL("SELECT * FROM fact WHERE name = %s AND lang = %s")
-        extended_query = sql.SQL('SELECT last_edit, last_editor from fact_detail '
-                                 'WHERE fact_name = %s AND fact_lang = %s')
+    async def find(self, name: str, lang: str) -> Optional[Fact]:
+        find_query = sql.SQL("SELECT fact.name, fact.lang, fact.message, fact.author, "
+                             "fact_detail.last_edit, fact_detail.last_editor, fact_detail.mfd "
+                             "FROM fact INNER JOIN fact_detail ON fact.name = fact_detail.fact_name "
+                             "AND fact.lang = fact_detail.fact_lang WHERE fact.name = %s AND fact.lang = %s")
         query_result = await self._dbm.query(find_query, (name.lower(), lang.lower()))
 
         if not query_result:
@@ -68,13 +67,7 @@ class FactManager(Singleton):
 
         return Fact(*query_result[0])
 
-    async def update(self, name: str, lang: str, author: str, content: str):
-        pass
-
-    async def add(self, name: str, lang: str, author: str, content: str):
-        pass
-
-    async def mfd(self, name: str, lang: str, value: bool, author: str):
+    async def modify(self, value: Fact) -> NoReturn:
         pass
 
     async def remove(self, name: str, lang: str, author: str):
@@ -90,7 +83,10 @@ class FactManager(Singleton):
         """
         return NotImplementedError
 
-    async def _details(self, value:Fact):
+    def _timestamp(self) -> datetime:
+        return datetime.now(timezone.utc)
+
+    async def _details(self, value: Fact):
         pass
 
     async def _find(self, name: str, lang: str):

@@ -16,6 +16,7 @@ import logging
 from Modules.context import Context
 from Modules.permissions import require_permission, TECHRAT, require_channel
 from Modules.rat_command import command
+from facts import DatabaseManager
 
 log = logging.getLogger(f"mecha.{__name__}")
 
@@ -39,3 +40,13 @@ async def cmd_debug_whois(context):
 @require_permission(TECHRAT)
 async def cmd_superping(context: Context):
     await context.reply("pong!")
+
+
+@command("debug-query")
+@require_permission(TECHRAT)
+async def cmd_query(context:Context):
+    # assuming `database` is a instance of the DBM
+    database = DatabaseManager()
+    data = await database.testquery(context.words_eol[1])
+    for item in data:
+        await context.reply(str(item))

@@ -64,7 +64,7 @@ class DatabaseManager(Singleton, object):
             assert self._dbhost
 
             self._dbport = config['database'].get('port')
-            assert self._dbport and self._dbport.isdecimal()
+            assert self._dbport
 
             self._dbname = config['database'].get('dbname')
             assert self._dbname
@@ -132,4 +132,23 @@ class DatabaseManager(Singleton, object):
 
         # Warning: May return an empty list.
         return list(await self._cursor.fetchall())
+
+    # FIXME: Delete before PR
+    async def testquery(self, query) -> list:
+        if self._connection is None:
+                self._connection = psycopg2.connect(host='127.0.0.1', port=5432, dbname='mecha3', user='mecha3', password='mecha3')
+                self._connection.autocommit = True
+                self._connection.set_client_encoding('utf-8')
+                self._cursor = self._connection.cursor()
+                self._cursor.execute(query)
+
+                result = self._cursor.fetchall()
+
+                self._cursor.close()
+                self._connection.close()
+
+                self._cursor = None
+                self._connection = None
+
+        return list(result)
 

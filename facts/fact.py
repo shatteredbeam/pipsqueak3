@@ -23,7 +23,6 @@ class Fact:
                  content: str,
                  author: str,
                  mfd: bool,  # MFD = Marked for deletion
-                 created_at: datetime.datetime,
                  last_edit: datetime.datetime,
                  last_editor: str,
                  history: list,
@@ -32,7 +31,6 @@ class Fact:
             self._lang = lang
             self._content = content
             self._author = author
-            self._created_at = created_at
             self._mfd = mfd
             self._last_edit = last_edit
             self._last_editor = last_editor
@@ -203,16 +201,6 @@ class Fact:
             raise ValueError("Expected string value for author")
 
         self._author = value
-
-    @property
-    def timestamp(self) -> datetime.datetime:
-        """
-        This property must ALWAYS be UTC (+0) and/or UTC aware.
-        Returns:
-            (datetime.datetime) date and time when the fact was added to the database.
-
-        """
-        return self._created_at
 
     @property
     def mfd(self) -> bool:

@@ -57,9 +57,11 @@ class FactManager(Singleton):
 
     async def find(self, name: str, lang: str) -> Optional[Fact]:
         find_query = sql.SQL("SELECT fact.name, fact.lang, fact.message, fact.author, "
-                             "fact_detail.last_edit, fact_detail.last_editor, fact_detail.mfd "
+                             "fact_detail.mfd, fact_detail.last_edit, fact_detail.last_editor "
                              "FROM fact INNER JOIN fact_detail ON fact.name = fact_detail.fact_name "
-                             "AND fact.lang = fact_detail.fact_lang WHERE fact.name = %s AND fact.lang = %s")
+                             "AND fact.lang = fact_detail.fact_lang "
+                             "WHERE fact.name = 'test' AND fact.lang = 'en'"
+                             )
         query_result = await self._dbm.query(find_query, (name.lower(), lang.lower()))
 
         if not query_result:
@@ -67,12 +69,21 @@ class FactManager(Singleton):
 
         return Fact(*query_result[0])
 
-    async def modify(self, value: Fact) -> NoReturn:
+    async def commit(self, value: Fact) -> NoReturn:
+        """
+        Commit a modified Fact to the database, overwriting any writable fields.
+        Generates a transaction log entry.
+        Args:
+            value: Fact to modify
+
+        Returns:
+
+        """
         pass
 
     async def remove(self, name: str, lang: str, author: str):
         """
-        Removes a fact from the database.  NYI.
+        Removes a fact from the database, generating a transaction log.  NYI.
         Args:
             name: Name of fact
             lang: language ID of fact
@@ -83,12 +94,8 @@ class FactManager(Singleton):
         """
         return NotImplementedError
 
+    async def _transaction(self, Fact,):
+        pass
+
     def _timestamp(self) -> datetime:
         return datetime.now(timezone.utc)
-
-    async def _details(self, value: Fact):
-        pass
-
-    async def _find(self, name: str, lang: str):
-        pass
-

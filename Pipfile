@@ -8,6 +8,7 @@ pydle = ">=0.8.5"
 pure-sasl = "*"
 coloredlogs = "*"
 psycopg2 = "*"
+humanfriendly = "*"
 
 [dev-packages]
 pytest = "*"

@@ -112,6 +112,18 @@ class FactCache(collections.MutableMapping):
         if self._expiry_task:
             self._expiry_task.cancel()
 
+    def __contains__(self, fact: Fact):
+        if not isinstance(fact, Fact):
+            return NotImplemented
+
+        if fact.name not in self._cache:
+            return False
+        if fact.lang not in self._cache.values():
+            return False
+        else:
+            return True
+
+
 
 
 

@@ -27,6 +27,10 @@ class Fact:
         self._edited = edited if edited else datetime.datetime.now(tz=datetime.timezone.utc)
         self._mfd = mfd
 
+        # Extended properties for Fact Cache
+        self._cached = False
+        self._ttl = None
+
     @property
     def name(self) -> str:
         """
@@ -252,3 +256,52 @@ class Fact:
 
         return True if self.name and self.lang and self.author \
                        and self.message and self.editedby else False
+
+    @property
+    def ttl(self) -> int:
+        """
+        TTL of a Cached fact.  Defaults to 12, settable in config under "fact_caching"
+
+        Only used when Fact Caching is enabled.
+
+        Returns:
+            (int) remaining time to live.
+        """
+        return self._ttl
+
+    @ttl.setter
+    def ttl(self, value: int):
+        """
+        Sets the TTL for this fact.  Only used by FactCache.
+
+        Args:
+            value: int TTL value
+
+        Returns: Nothing
+        """
+
+        if not isinstance(value, int):
+            raise TypeError("Fact.ttl must be of integer type!")
+
+    @property
+    def cached(self) -> bool:
+        """
+        Returns true if Fact was returned by the Fact Cache and not by database lookup.
+        Returns:
+            (bool) True/False.
+        """
+        return self._cached
+
+    @cached.setter
+    def cached(self, value: bool):
+        """
+        Sets the cached property of the fact.  Only used by FactCache.
+
+        Args:
+            value: bool True/False if cached fact.
+
+        Returns: Nothing
+        """
+
+        if not isinstance(value, int):
+            raise TypeError("Fact.ttl must be of integer type!")

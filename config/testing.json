@@ -38,6 +38,11 @@
     "url": "http://localhost/",
     "tokenfile": null
   },
+  "fact_caching": {
+    "ttl": 12,
+    "interval": 1800,
+    "enabled": true
+  },
   "permissions": {
     "recruit": {
       "vhosts": [

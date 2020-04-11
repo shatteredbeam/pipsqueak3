@@ -62,3 +62,4 @@ level = 4
 
 [board]
 cycle_at = 15
+ignore_this_line = 9990
